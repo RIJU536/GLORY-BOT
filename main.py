@@ -4171,6 +4171,7 @@ async def start_web_server():
     app.router.add_get("/sw.js", handle_sw_js)
     app.router.add_get("/logo.gif", handle_logo_gif)
     app.router.add_get("/static/logo.gif", handle_logo_gif)
+    app.router.add_get("/favicon.ico", handle_logo_gif)
     if os.path.exists("static"):
         app.router.add_static("/static/", path="static", name="static")
 
