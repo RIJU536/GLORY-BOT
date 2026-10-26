@@ -22,7 +22,8 @@
     }
   },
   "sessions": {
-    "2284d337ddcf451491edc65b1c037649": "999x"
+    "2284d337ddcf451491edc65b1c037649": "999x",
+    "a6cddb27988e4e4394bc8ffee5888d6e": "999x"
   },
   "coupons": {},
   "transactions": [],
@@ -33,8 +34,8 @@
     "basic_credit_usd": 1.7,
     "premium_credit_usd": 20.0,
     "binance_pay_id": "854729104",
-    "telegram": "https://t.me/dg_drift",
-    "whatsapp": "https://wa.me/6282326562316",
+    "discord": "https://discord.gg/uFFd8c7B5A",
+    "support": "https://discord.gg/uFFd8c7B5A",
     "vapid_public_key": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U",
     "regions": [
       {

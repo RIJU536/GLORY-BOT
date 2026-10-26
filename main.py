@@ -257,8 +257,8 @@ class PanelDB:
             "basic_credit_usd": 1.70,
             "premium_credit_usd": 20.00,
             "binance_pay_id": "854729104",
-            "telegram": "https://t.me/dg_drift",
-            "whatsapp": "https://wa.me/6282326562316",
+            "discord": "https://discord.gg/uFFd8c7B5A",
+            "support": "https://discord.gg/uFFd8c7B5A",
             "vapid_public_key": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U",
             "regions": [
                 {"id": "ind", "region_name": "India", "code": "IND", "tier": "basic", "enabled": True},
@@ -2850,7 +2850,8 @@ async def create_four_accounts(region: str, clan_id: str, count: int = 2, passwo
                     if not major_payload or not login_payload:
                         await asyncio.sleep(2); continue
 
-                    nickname_final = f"AGS-{''.join(random.choices(string.ascii_uppercase + string.digits, k=5))}"
+                    rand_num = random.randint(100000, 999999)
+                    nickname_final = f"DISHA-{rand_num}"
                     mr = await major_register(release_v, access_token, open_id,
                                               nickname_final, game_version, login_url, lang)
                     if not mr:

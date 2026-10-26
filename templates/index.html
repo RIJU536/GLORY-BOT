@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
-<title>ISHU X999 | Ultra-Premium Guild Glory Cloud Engine</title>
+<title>ISHU X 999 UID BOT | Guild Glory Cloud Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
@@ -12,17 +12,18 @@
 :root {
     --bg: #070204;
     --bg-dark: #040102;
-    --surface: rgba(18, 6, 10, 0.82);
+    --surface: rgba(18, 6, 10, 0.85);
     --surface-solid: #12060a;
-    --surface-2: rgba(28, 10, 16, 0.75);
+    --surface-2: rgba(28, 10, 16, 0.8);
     --surface-3: #260c14;
-    --border: rgba(255, 35, 75, 0.14);
-    --border-glow: rgba(255, 45, 85, 0.45);
+    --border: rgba(255, 35, 75, 0.16);
+    --border-glow: rgba(255, 45, 85, 0.5);
     --red-primary: #ff1e42;
     --red-glow: #ff2d55;
     --red-deep: #b30021;
     --red-gradient: linear-gradient(135deg, #ff1e42 0%, #b30021 50%, #680011 100%);
-    --crimson-pill: rgba(255, 30, 66, 0.12);
+    --discord: #5865F2;
+    --discord-glow: rgba(88, 101, 242, 0.45);
     --gold: #f59e0b;
     --lime: #10b981;
     --cyan: #06b6d4;
@@ -61,7 +62,7 @@ body::before {
     background: 
         radial-gradient(circle 800px at 15% -10%, rgba(255, 30, 66, 0.18), transparent 60%),
         radial-gradient(circle 700px at 85% 20%, rgba(179, 0, 33, 0.15), transparent 60%),
-        radial-gradient(circle 900px at 50% 110%, rgba(255, 45, 85, 0.12), transparent 70%);
+        radial-gradient(circle 900px at 50% 110%, rgba(88, 101, 242, 0.10), transparent 70%);
     pointer-events: none;
     animation: crimsonPulse 12s ease-in-out infinite alternate;
 }
@@ -84,7 +85,6 @@ body::after {
     mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
 }
 
-/* APP SHELL */
 #app {
     display: none;
     position: relative;
@@ -141,7 +141,7 @@ body::after {
     position: absolute;
     inset: -3px;
     border-radius: 18px;
-    background: conic-gradient(from 0deg, var(--red-primary), #ff758c, var(--red-deep), var(--red-primary));
+    background: conic-gradient(from 0deg, var(--red-primary), #ff758c, var(--discord), var(--red-primary));
     animation: spinRing 5s linear infinite;
     filter: drop-shadow(0 0 12px rgba(255, 30, 66, 0.5));
 }
@@ -190,6 +190,21 @@ body::after {
     color: var(--white-muted);
     font-weight: 600;
     letter-spacing: 0.5px;
+    flex-wrap: wrap;
+}
+
+.bot-id-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    background: rgba(255, 30, 66, 0.15);
+    border: 1px solid rgba(255, 30, 66, 0.35);
+    color: #ff99aa;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 .live-pill {
@@ -244,6 +259,7 @@ body::after {
     white-space: nowrap;
     text-transform: uppercase;
     letter-spacing: 0.8px;
+    text-decoration: none;
     position: relative;
     overflow: hidden;
 }
@@ -271,6 +287,20 @@ body::after {
     box-shadow: 0 8px 28px rgba(255, 30, 66, 0.5);
 }
 
+.btn-discord {
+    background: var(--discord);
+    border: 1px solid rgba(136, 148, 255, 0.5);
+    color: #fff !important;
+    box-shadow: 0 6px 20px var(--discord-glow);
+}
+
+.btn-discord:hover {
+    background: #4752c4;
+    border-color: #9aa4ff;
+    box-shadow: 0 8px 26px rgba(88, 101, 242, 0.7);
+    transform: translateY(-2px);
+}
+
 .btn-cert {
     background: rgba(245, 158, 11, 0.1);
     border: 1px solid rgba(245, 158, 11, 0.3);
@@ -280,7 +310,6 @@ body::after {
 .btn-cert:hover {
     background: rgba(245, 158, 11, 0.2);
     border-color: rgba(245, 158, 11, 0.6);
-    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.25);
 }
 
 .btn-danger {
@@ -369,7 +398,7 @@ body::after {
     font-weight: 700;
 }
 
-/* SECTION TITLE */
+/* SECTION HEAD */
 .section-head {
     display: flex;
     justify-content: space-between;
@@ -761,59 +790,6 @@ body::after {
     text-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
 }
 
-/* PROGRESS BAR */
-.progress-block {
-    padding: 14px 16px;
-    border-radius: var(--r-sm);
-    background: var(--surface-solid);
-    border: 1px solid var(--border);
-    margin-bottom: 12px;
-}
-
-.progress-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 11px;
-    color: var(--white-muted);
-}
-
-.progress-top b {
-    color: var(--white);
-    font-family: 'JetBrains Mono', monospace;
-}
-
-.progress-track {
-    height: 8px;
-    border-radius: 100px;
-    background: rgba(255, 255, 255, 0.08);
-    overflow: hidden;
-    position: relative;
-}
-
-.progress-fill {
-    height: 100%;
-    border-radius: 100px;
-    background: var(--red-gradient);
-    box-shadow: 0 0 12px rgba(255, 30, 66, 0.6);
-    transition: width 0.8s cubic-bezier(0.2, 0.9, 0.2, 1);
-}
-
-.progress-bot {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 6px;
-    font-size: 10px;
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--white-muted);
-}
-
-.progress-bot .pct {
-    color: var(--red-primary);
-    font-weight: 800;
-}
-
 /* CONSOLE PANEL */
 .console-panel {
     display: flex;
@@ -882,9 +858,9 @@ body::after {
     color: rgba(255, 255, 255, 0.75);
 }
 
-.log-msg.success { color: var(--lime); text-shadow: 0 0 8px rgba(16, 185, 129, 0.3); }
-.log-msg.warning { color: var(--gold); text-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
-.log-msg.error { color: #f87171; text-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+.log-msg.success { color: var(--lime); }
+.log-msg.warning { color: var(--gold); }
+.log-msg.error { color: #f87171; }
 .log-msg.info { color: #38bdf8; }
 
 /* MODALS */
@@ -907,7 +883,7 @@ body::after {
 
 .modal-card {
     width: 100%;
-    max-width: 500px;
+    max-width: 520px;
     padding: 32px 28px;
     border-radius: var(--r-xl);
     background: linear-gradient(160deg, #18070d 0%, #0d0306 100%);
@@ -925,7 +901,7 @@ body::after {
     left: 20%;
     right: 20%;
     height: 2px;
-    background: linear-gradient(90deg, transparent, var(--red-primary), var(--gold), transparent);
+    background: linear-gradient(90deg, transparent, var(--red-primary), var(--discord), transparent);
 }
 
 @keyframes modalRise {
@@ -1028,12 +1004,6 @@ body::after {
     justify-content: center;
     font-size: 32px;
     color: #f59e0b;
-    animation: certPulse 3s ease-in-out infinite;
-}
-
-@keyframes certPulse {
-    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.4)); }
-    50% { transform: scale(1.05); filter: drop-shadow(0 0 18px rgba(245, 158, 11, 0.7)); }
 }
 
 .cert-badge-box {
@@ -1089,15 +1059,17 @@ body::after {
 .footer-brand {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-weight: 700;
+    gap: 12px;
+    font-weight: 800;
     color: var(--white);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
 }
 
 .footer-brand img {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
 }
 
 .footer-copy {
@@ -1162,7 +1134,7 @@ body::after {
     position: absolute;
     inset: -4px;
     border-radius: 30px;
-    background: conic-gradient(from 0deg, var(--red-primary), #ff6b8b, var(--gold), var(--red-primary));
+    background: conic-gradient(from 0deg, var(--red-primary), #ff6b8b, var(--discord), var(--red-primary));
     animation: spinRing 6s linear infinite;
     filter: drop-shadow(0 0 16px rgba(255, 30, 66, 0.6));
 }
@@ -1186,7 +1158,7 @@ body::after {
 
 .login-brand-title {
     font-family: 'Orbitron', sans-serif;
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 900;
     letter-spacing: 2px;
     background: linear-gradient(90deg, #ffffff, #ffb8c6, #ff2d55);
@@ -1257,24 +1229,21 @@ body::after {
     font-family: 'JetBrains Mono', monospace;
 }
 
-.login-cert-pill {
-    margin-top: 20px;
+.discord-support-link {
+    margin-top: 18px;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    color: rgba(245, 158, 11, 0.85);
-    background: rgba(245, 158, 11, 0.08);
-    border: 1px solid rgba(245, 158, 11, 0.22);
-    padding: 5px 12px;
-    border-radius: 100px;
-    cursor: pointer;
+    gap: 8px;
+    font-size: 11px;
+    color: #8da0ff;
+    text-decoration: none;
+    font-weight: 700;
     transition: 0.2s;
 }
 
-.login-cert-pill:hover {
-    background: rgba(245, 158, 11, 0.16);
-    color: #fcd34d;
+.discord-support-link:hover {
+    color: #fff;
+    text-shadow: 0 0 10px rgba(88, 101, 242, 0.8);
 }
 
 @media(max-width: 900px) {
@@ -1295,10 +1264,10 @@ body::after {
         <div class="login-logo-wrap">
             <div class="login-logo-ring"></div>
             <div class="login-logo-core">
-                <img src="/static/logo.gif" alt="ISHU X999 Logo" onerror="this.onerror=null;this.src='/logo.gif';">
+                <img src="/static/logo.gif" alt="ISHU Logo" onerror="this.onerror=null;this.src='/logo.gif';">
             </div>
         </div>
-        <div class="login-brand-title">ISHU X999</div>
+        <div class="login-brand-title">ISHU X 999 UID BOT</div>
         <div class="login-brand-sub">Guild Glory <span>Automation Engine</span></div>
 
         <form onsubmit="handleLoginSubmit(event)">
@@ -1316,8 +1285,14 @@ body::after {
             </button>
         </form>
 
-        <div class="login-cert-pill" onclick="openCertModal()">
-            <i class="fa-solid fa-certificate"></i> Educational & Research Verified
+        <div style="margin-top:20px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap;">
+            <a href="https://discord.gg/uFFd8c7B5A" target="_blank" class="discord-support-link">
+                <i class="fa-brands fa-discord"></i> Official Discord Support
+            </a>
+            <span style="color:var(--white-muted);">•</span>
+            <span style="font-size:11px;color:var(--gold);cursor:pointer;" onclick="openCertModal()">
+                <i class="fa-solid fa-certificate"></i> Educational Compliance
+            </span>
         </div>
     </div>
 </section>
@@ -1335,15 +1310,19 @@ body::after {
                     </div>
                 </div>
                 <div class="brand-text">
-                    <h1>ISHU X999</h1>
+                    <h1>ISHU X 999 UID BOT</h1>
                     <div class="brand-sub">
-                        <span>GUILD GLORY CLOUD ENGINE</span>
+                        <span>GUILD BOT IDENTITY:</span>
+                        <span class="bot-id-pill"><i class="fa-solid fa-robot"></i> DISHA X ISHU</span>
                         <span class="live-pill"><span class="dot"></span> LIVE 24/7</span>
                     </div>
                 </div>
             </div>
 
             <div class="topbar-actions">
+                <a href="https://discord.gg/uFFd8c7B5A" target="_blank" class="btn btn-discord">
+                    <i class="fa-brands fa-discord"></i> Discord Support
+                </a>
                 <button class="btn btn-cert" onclick="openCertModal()">
                     <i class="fa-solid fa-award"></i> Certificate
                 </button>
@@ -1360,7 +1339,7 @@ body::after {
         <section class="stats">
             <div class="stat-card">
                 <div class="stat-header">
-                    <span class="stat-label">Bot Fleet</span>
+                    <span class="stat-label">Bot Fleet (DISHA)</span>
                     <i class="fa-solid fa-robot stat-icon"></i>
                 </div>
                 <div class="stat-value" id="stat-accounts">0</div>
@@ -1387,11 +1366,11 @@ body::after {
 
             <div class="stat-card">
                 <div class="stat-header">
-                    <span class="stat-label">System State</span>
+                    <span class="stat-label">Cloud State</span>
                     <i class="fa-solid fa-server stat-icon"></i>
                 </div>
                 <div class="stat-value" style="font-size:22px;color:var(--lime);">OPTIMAL</div>
-                <div class="stat-foot">24/7 Cloud Architecture</div>
+                <div class="stat-foot">Support: Discord Only</div>
             </div>
         </section>
 
@@ -1399,7 +1378,7 @@ body::after {
         <section>
             <div class="section-head">
                 <div class="section-title">
-                    <i class="fa-solid fa-users-viewfinder"></i> Active Squad Deployments
+                    <i class="fa-solid fa-users-viewfinder"></i> Active Squad Deployments (DISHA X ISHU)
                 </div>
                 <button class="btn" onclick="fetchStats()">
                     <i class="fa-solid fa-rotate"></i> Refresh State
@@ -1437,12 +1416,15 @@ body::after {
         <footer class="app-footer">
             <div class="footer-brand">
                 <img src="/static/logo.gif" alt="ISHU Logo" onerror="this.onerror=null;this.src='/logo.gif';">
-                <span>ISHU X999 • GUILD GLORY</span>
+                <span>ISHU X 999 UID BOT • DISHA X ISHU</span>
             </div>
             <div class="footer-copy">
-                Copyright © 2026 <b>ISHU X999</b>. All Rights Reserved.
+                Copyright © 2026 <b>ISHU X 999 UID BOT</b>. All Rights Reserved.
             </div>
-            <div style="display:flex;gap:12px;align-items:center;">
+            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+                <a href="https://discord.gg/uFFd8c7B5A" target="_blank" style="color:#8da0ff;text-decoration:none;font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+                    <i class="fa-brands fa-discord"></i> Support Discord
+                </a>
                 <span class="live-pill"><span class="dot"></span> 24/7 ONLINE</span>
                 <span style="font-size:11px;color:var(--gold);cursor:pointer;" onclick="openCertModal()"><i class="fa-solid fa-certificate"></i> Educational Compliance</span>
             </div>
@@ -1472,6 +1454,13 @@ body::after {
             <div class="field-block">
                 <label>Clan / Guild ID</label>
                 <input id="team-clan" class="field-input" type="text" placeholder="e.g. 3055092344" required>
+            </div>
+            <div class="field-block">
+                <label>Bot Identity & Random ID Generation</label>
+                <input class="field-input" type="text" value="DISHA X ISHU (Random: DISHA-XXXXXX)" readonly style="opacity:0.85;cursor:not-allowed;">
+                <p style="font-size:10.5px;color:#ff99aa;margin-top:5px;font-family:'JetBrains Mono',monospace;">
+                    ✓ Every bot created gets a unique <b>DISHA-XXXXXX</b> random number ID automatically!
+                </p>
             </div>
             <div class="field-block">
                 <label>Bots in Duo Unit</label>
@@ -1515,8 +1504,9 @@ body::after {
             <strong>OFFICIAL DISCLAIMER & TERMS</strong>
             This software, interface, and protocol automation system are designed and distributed <b>exclusively for technical education, protocol study, distributed server architecture analysis, and network performance research</b>.
             <br><br>
-            • Developed by: <b>ISHU X999</b><br>
-            • License: Non-commercial educational research license.<br>
+            • System: <b>ISHU X 999 UID BOT</b><br>
+            • Bot Identity: <b>DISHA X ISHU</b> (Random Number Generator)<br>
+            • Support: <b>Only Discord (<a href="https://discord.gg/uFFd8c7B5A" target="_blank" style="color:#8da0ff;">discord.gg/uFFd8c7B5A</a>)</b><br>
             • Disclaimer: Not endorsed by, affiliated with, or associated with Garena, Free Fire, or Sea Ltd. All game names, marks, and assets belong to their respective trademark holders.
         </div>
 
@@ -1525,12 +1515,12 @@ body::after {
             <span>ISHU-EDU-2026-X999-VERIFIED</span>
         </div>
         <div class="cert-meta-row">
-            <span>Author / Owner:</span>
-            <span>ISHU X999</span>
+            <span>Bot Engine:</span>
+            <span>ISHU X 999 UID BOT</span>
         </div>
         <div class="cert-meta-row">
-            <span>System Architecture:</span>
-            <span>Async AioHTTP + Duo Match Engine</span>
+            <span>Bot Name Standard:</span>
+            <span>DISHA X ISHU</span>
         </div>
         <div class="cert-meta-row">
             <span>Status:</span>
@@ -1572,7 +1562,6 @@ function handleLoginSubmit(e) {
         err.innerText = "";
         try { localStorage.setItem(SESSION_STORAGE_KEY, "VALID_ISHU_X999"); } catch(ex){}
         
-        // Also call backend auth in background
         fetch("/api/auth/login", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -1628,13 +1617,13 @@ async function submitCreateTeam(e) {
     if (!clan) { alert("Guild / Clan ID is required"); return; }
 
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Deploying...';
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Deploying DISHA Bots...';
 
     try {
         const r = await fetch("/api/create_team", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({region, clan_id: clan, count, password: "AGS_COMMUNITY"})
+            body: JSON.stringify({region, clan_id: clan, count, password: "DISHA X ISHU"})
         });
         const d = await r.json();
         if (d.ok) {
@@ -1691,7 +1680,7 @@ function renderSlots(accounts) {
             <div style="grid-column:1/-1;text-align:center;padding:50px 20px;color:var(--white-muted);border:1px dashed var(--border);border-radius:var(--r-xl);background:var(--surface);">
                 <i class="fa-solid fa-ghost" style="font-size:36px;color:var(--red-primary);margin-bottom:12px;"></i>
                 <h4 style="font-size:15px;color:#fff;margin-bottom:6px;font-family:'Orbitron',sans-serif;">No Active Squad Deployments</h4>
-                <p style="font-size:12px;">Click "Create Squad" to launch your first Duo bot unit.</p>
+                <p style="font-size:12px;">Click "Create Squad" to launch your first DISHA X ISHU bot unit.</p>
             </div>
         `;
         return;
@@ -1714,7 +1703,7 @@ function renderSlots(accounts) {
 
         card.innerHTML = `
             <div class="slot-header">
-                <div class="slot-title">Squad #${index + 1}</div>
+                <div class="slot-title">Squad #${index + 1} • DISHA</div>
                 <div class="slot-guild"><i class="fa-solid fa-shield"></i> Clan ${esc(gid)}</div>
             </div>
             <div class="slot-members">${memberHtml}</div>
@@ -1758,7 +1747,7 @@ function showDetails(gid, bots) {
                         <span class="acc-level">L${level}</span>
                     </div>
                     <div style="min-width:0">
-                        <div class="acc-name">${esc(acc.nickname || "Player")} <span class="acc-region">${esc(acc.region || "BD")}</span></div>
+                        <div class="acc-name">${esc(acc.nickname || "DISHA-BOT")} <span class="acc-region">${esc(acc.region || "BD")}</span></div>
                         <div class="acc-uid"><span>UID: ${esc(acc.uid)}</span></div>
                     </div>
                 </div>
