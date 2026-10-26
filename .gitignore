@@ -4,4 +4,6 @@ token_cache.json
 .env
 .local/
 .cache/
+cloudflared.exe
+
 

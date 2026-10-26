@@ -21,7 +21,9 @@
       "created_at": 1792874926
     }
   },
-  "sessions": {},
+  "sessions": {
+    "2284d337ddcf451491edc65b1c037649": "999x"
+  },
   "coupons": {},
   "transactions": [],
   "groups": {},
