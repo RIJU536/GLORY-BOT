@@ -230,6 +230,7 @@ def get_team_state(squad_id: int) -> Dict[str, Any]:
             "peers": {},
             "leader_uid": None,
             "team_code": None,
+            "member_ready": False,
             "lock": asyncio.Lock(),
         }
     return _team_states[squad_id]
@@ -2213,11 +2214,30 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             await asyncio.sleep(1.0)
 
             print_success(f"[SQUAD {squad_id+1}] 🚀 {uid_str} loop: ready → 1s → start (every 5s)")
+            wait_partner_ticks = 0
             while _team_active["flag"]:
                 try:
                     if bot_state.is_paused(uid_str): break
                     async with _team_state["lock"]:
                         if _team_state["leader_uid"] != uid_str: break
+                        is_partner_ready = bool(_team_state.get("member_ready", False))
+
+                    # STRICT DUO: Never start match solo!
+                    if not is_partner_ready:
+                        wait_partner_ticks += 1
+                        if wait_partner_ticks % 3 == 0:
+                            print_info(f"[SQUAD {squad_id+1}] ⏳ Leader {uid_str} waiting for partner to join before starting match (no solo allowed)...")
+                            for peer_uid, peer_info in peers_snapshot.items():
+                                if peer_uid == uid_str: continue
+                                peer_acc_id = None
+                                try: peer_acc_id = peer_info["data"].get("account_id")
+                                except Exception: pass
+                                if not peer_acc_id: peer_acc_id = peer_uid
+                                await _invite_uid(int(peer_acc_id), f" bot2")
+                        await asyncio.sleep(2.0)
+                        continue
+
+                    wait_partner_ticks = 0
                     own_id = current_account_data.get('account_id', own_id_num) if current_account_data else own_id_num
                     try:
                         rdy = ready_for_game(int(own_id), current_key, current_iv)
@@ -2273,6 +2293,8 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         rdy = ready_for_game(int(my_id), current_key, current_iv)
                         _writer_ref["w"].write(rdy)
                         await _writer_ref["w"].drain()
+                        async with _team_state["lock"]:
+                            _team_state["member_ready"] = True
                 except Exception as e:
                     print_warning(f"[TEAM] member trigger: {e}")
                 try:
@@ -2349,8 +2371,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         print_success(f"[SQUAD {squad_id+1}] 👑 {uid_str} is leader")
 
                 async def send_solo_start_match():
-                    nonlocal search_attempts
-                    search_attempts += 1
+                    return
                     try:
                         await asyncio.sleep(random.uniform(0.2, 0.4))
                         try:
@@ -2483,6 +2504,8 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                     if writer and not writer.is_closing():
                                         writer.write(rdy)
                                         await writer.drain()
+                                        async with _team_state["lock"]:
+                                            _team_state["member_ready"] = True
                                 except Exception:
                                     pass
                         except Exception as e:
@@ -2531,6 +2554,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 async with _team_state["lock"]:
                                     _team_state["peers"].pop(uid_str, None)
                                     _team_state.get("members_in_team", set()).discard(uid_str)
+                                    _team_state["member_ready"] = False
                                     if _team_state.get("leader_uid") == uid_str:
                                         _team_state["leader_uid"] = None
                                         _team_state["team_code"] = None
