@@ -2213,7 +2213,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 try:
                     if bot_state.is_paused(uid_str): break
                     async with _team_state["lock"]:
-                        is_partner_ready = bool(_team_state.get("member_ready", False))
+                        is_partner_ready = bool(_team_state.get("member_ready", False)) and bool(_team_state.get("team_code"))
 
                     # STRICT DUO: Never start match solo! Auto re-create squad team if partner not joined
                     if not is_partner_ready:
@@ -2289,15 +2289,15 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 if last_joined_tc != tc:
                                     last_joined_tc = tc
                                     print_success(f"[SQUAD {squad_id+1}] 🔑 Member {uid_str} joined via team_code {tc}")
-                                await asyncio.sleep(0.5)
+                                await asyncio.sleep(0.6)
+
+                                rdy = ready_for_game(int(my_id), current_key, current_iv)
+                                _writer_ref["w"].write(rdy)
+                                await _writer_ref["w"].drain()
+                                async with _team_state["lock"]:
+                                    _team_state["member_ready"] = True
                             except Exception as e:
                                 print_warning(f"[TEAM] join_team_by_code err: {e}")
-
-                        rdy = ready_for_game(int(my_id), current_key, current_iv)
-                        _writer_ref["w"].write(rdy)
-                        await _writer_ref["w"].drain()
-                        async with _team_state["lock"]:
-                            _team_state["member_ready"] = True
                 except Exception as e:
                     print_warning(f"[TEAM] member trigger: {e}")
                 try:
