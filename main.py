@@ -2254,10 +2254,20 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
                     except Exception as e:
                         print_warning(f"[TEAM] ready_for_game err: {e}")
-                    await asyncio.sleep(1.0)
-                    sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
-                    if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                        _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
+                    await asyncio.sleep(0.5)
+                    try:
+                        sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
+                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                            _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
+                    except Exception as e:
+                        print_warning(f"[TEAM] start_match err: {e}")
+                    await asyncio.sleep(0.5)
+                    try:
+                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                            await start_game_battle_royale(account_region, client_version, _writer_ref["w"], current_key, current_iv)
+                            print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} queued DUO match search with partner!")
+                    except Exception as e:
+                        print_warning(f"[TEAM] start_game_battle_royale err: {e}")
                 except Exception as e:
                     print_warning(f"[TEAM] start_match err: {e}")
                 try: await asyncio.wait_for(asyncio.sleep(4.5), timeout=5.0)
@@ -2286,16 +2296,15 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             tc = _team_state.get("team_code")
                         async with _team_state["lock"]:
                             is_rdy = bool(_team_state.get("member_ready", False))
-                        if tc:
+                        if tc and last_joined_tc != tc:
                             try:
                                 jpkt = join_team_by_code(
                                     tc, current_key, current_iv,
                                     region=account_region, game_version=client_version)
                                 _writer_ref["w"].write(jpkt)
                                 await _writer_ref["w"].drain()
-                                if last_joined_tc != tc:
-                                    last_joined_tc = tc
-                                    print_success(f"[SQUAD {squad_id+1}] 🔑 Member {uid_str} joined via team_code {tc}")
+                                last_joined_tc = tc
+                                print_success(f"[SQUAD {squad_id+1}] 🔑 Member {uid_str} joined via team_code {tc}")
                                 await asyncio.sleep(0.6)
 
                                 rdy = ready_for_game(int(my_id), current_key, current_iv)
@@ -2504,8 +2513,18 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                         ldr_peer = _team_state["peers"].get(ldr, {})
                                         inviter = str((ldr_peer.get("data") or {}).get("account_id") or ldr)
 
+                            async with _team_state["lock"]:
+                                squad_ldr = _team_state.get("leader_uid")
+                                squad_ldr_peer = _team_state["peers"].get(squad_ldr, {}) if squad_ldr else {}
+                                squad_ldr_acc = str((squad_ldr_peer.get("data") or {}).get("account_id") or squad_ldr or "")
+
+                            # Strict Duo Security: reject invites from stranger / external players
+                            if inviter and (inviter != str(squad_ldr) and inviter != str(squad_ldr_acc)):
+                                print_warning(f"[SQUAD {squad_id+1}] ⚠️ Ignored external invite from {inviter} (my squad leader is {squad_ldr})")
+                                inviter = None
+
                             if inviter and group_id and not is_leader:
-                                print_success(f"[SQUAD {squad_id+1}] 📨 Invite from {inviter} (group={group_id}) → accepting...")
+                                print_success(f"[SQUAD {squad_id+1}] 📨 Invite from squad leader {inviter} (group={group_id}) → accepting...")
                                 for _ in range(2):
                                     try:
                                         acc = accept_team_invite(
