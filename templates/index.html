@@ -1329,6 +1329,9 @@ body::after {
                 <button class="btn btn-cert" onclick="openCertModal()">
                     <i class="fa-solid fa-award"></i> Certificate
                 </button>
+                <button class="btn btn-warning" id="btn-toggle-all-bots" onclick="togglePauseAllBots()" style="background:rgba(234,179,8,0.15);border:1px solid #eab308;color:#facc15;font-weight:700;">
+                    <i class="fa-solid fa-pause"></i> <span id="pause-all-text">Stop All Bots</span>
+                </button>
                 <button class="btn btn-primary" onclick="openCreateTeamModal()">
                     <i class="fa-solid fa-plus-circle"></i> Create Squad
                 </button>
@@ -1761,6 +1764,12 @@ function showDetails(gid, bots) {
                 <div class="metric-box"><span>Current EXP</span><strong>${curExp.toLocaleString()}</strong></div>
                 <div class="metric-box gain"><span>EXP Gained</span><strong>+${Number(acc.gained_exp || 0).toLocaleString()}</strong></div>
             </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06);">
+                <span style="font-size:12px; color:#94a3b8;">Bot Action:</span>
+                <button class="btn btn-sm" onclick="event.stopPropagation(); togglePauseBot('${esc(acc.uid)}')" style="padding:5px 14px; font-size:12px; border-radius:8px; cursor:pointer; background:${paused ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}; border:1px solid ${paused ? '#22c55e' : '#ef4444'}; color:${paused ? '#4ade80' : '#f87171'}; font-weight:600;">
+                    <i class="fa-solid ${paused ? 'fa-play' : 'fa-pause'}"></i> ${paused ? 'Start Bot' : 'Stop Bot'}
+                </button>
+            </div>
         `;
         container.appendChild(card);
     });
@@ -1796,6 +1805,56 @@ async function clearLogs() {
 function esc(s) {
     if (s === null || s === undefined) return "";
     return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+
+async function togglePauseAllBots() {
+    try {
+        const btn = document.getElementById('btn-toggle-all-bots');
+        if (btn) btn.disabled = true;
+        const r = await fetch('/api/account/pause_all', { method: 'POST' });
+        const d = await r.json();
+        if (d.status === 'ok') {
+            updatePauseButtonState(d.all_paused);
+            fetchStats();
+        }
+    } catch(e) {
+        console.error(e);
+    } finally {
+        const btn = document.getElementById('btn-toggle-all-bots');
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function togglePauseBot(uid) {
+    try {
+        const r = await fetch('/api/account/pause', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid })
+        });
+        const d = await r.json();
+        if (d.status === 'ok') {
+            fetchStats();
+        }
+    } catch(e) {
+        console.error(e);
+    }
+}
+
+function updatePauseButtonState(allPaused) {
+    const btn = document.getElementById('btn-toggle-all-bots');
+    if (!btn) return;
+    if (allPaused) {
+        btn.innerHTML = '<i class="fa-solid fa-play"></i> <span id="pause-all-text">Start All Bots</span>';
+        btn.style.color = '#4ade80';
+        btn.style.borderColor = '#22c55e';
+        btn.style.background = 'rgba(34,197,94,0.15)';
+    } else {
+        btn.innerHTML = '<i class="fa-solid fa-pause"></i> <span id="pause-all-text">Stop All Bots</span>';
+        btn.style.color = '#facc15';
+        btn.style.borderColor = '#eab308';
+        btn.style.background = 'rgba(234,179,8,0.15)';
+    }
 }
 
 checkSession();
