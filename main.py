@@ -2130,6 +2130,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             if not is_leader:
                 return
 
+            wait_peers_ticks = 0
             while True:
                 async with _team_state["lock"]:
                     n = len(_team_state["peers"])
@@ -2137,6 +2138,9 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     break
                 if bot_state.is_paused(uid_str):
                     return
+                wait_peers_ticks += 1
+                if wait_peers_ticks % 16 == 0:
+                    print_info(f"[SQUAD {squad_id+1}] ⏳ Leader {uid_str} waiting for partner to connect (peers={n}/{expected_squad_size})...")
                 await asyncio.sleep(0.5)
 
             await asyncio.sleep(1.5)
@@ -2213,7 +2217,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 try:
                     if bot_state.is_paused(uid_str): break
                     async with _team_state["lock"]:
-                        is_partner_ready = bool(_team_state.get("member_ready", False)) and bool(_team_state.get("team_code"))
+                        is_partner_ready = bool(_team_state.get("member_ready", False))
 
                     # STRICT DUO: Never start match solo! Auto re-create squad team if partner not joined
                     if not is_partner_ready:
@@ -2279,6 +2283,8 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                         async with _team_state["lock"]:
                             tc = _team_state.get("team_code")
+                        async with _team_state["lock"]:
+                            is_rdy = bool(_team_state.get("member_ready", False))
                         if tc:
                             try:
                                 jpkt = join_team_by_code(
@@ -2298,6 +2304,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                     _team_state["member_ready"] = True
                             except Exception as e:
                                 print_warning(f"[TEAM] join_team_by_code err: {e}")
+                        elif is_rdy:
+                            try:
+                                rdy = ready_for_game(int(my_id), current_key, current_iv)
+                                _writer_ref["w"].write(rdy)
+                                await _writer_ref["w"].drain()
+                            except Exception:
+                                pass
                 except Exception as e:
                     print_warning(f"[TEAM] member trigger: {e}")
                 try:
@@ -2420,14 +2433,16 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     if hex_data.startswith("0600") and packet_length > 20:
                         await _process_social_packet(data, tag="MAIN"); continue
 
-                    # 0500: team/invite (FIXED DUO JOIN)
-                    if hex_data.startswith("0500") and packet_length > 10:
+                    # 0500: team/invite (MULTI-OFFSET DUO JOIN)
+                    if ("0500" in hex_data) and packet_length > 10:
                         try:
+                            p_off = hex_data.find("0500")
+                            slice_hex = hex_data[p_off:]
                             dec = None
-                            for off in (10, 12, 8, 6):
-                                if len(hex_data) <= off:
+                            for off in (10, 12, 8, 6, 4):
+                                if len(slice_hex) <= off:
                                     continue
-                                inner = bytes.fromhex(hex_data[off:])
+                                inner = bytes.fromhex(slice_hex[off:])
                                 cand = decode_protobuf_dict(inner)
                                 if not cand:
                                     alt = decode_protobuf_2(inner)
@@ -4078,6 +4093,33 @@ async def api_stats(request):
     except Exception as e:
         return aiohttp.web.json_response({"error": str(e), "uptime": 1})
 
+async def api_squads(request):
+    try:
+        data = []
+        for sq_id in sorted(_team_states.keys()):
+            state = _team_states[sq_id]
+            peers_list = []
+            for puid, pval in state.get("peers", {}).items():
+                acc_data = pval.get("data") or {}
+                wr = pval.get("writer")
+                peers_list.append({
+                    "uid": puid,
+                    "account_id": acc_data.get("account_id"),
+                    "nickname": acc_data.get("nickname"),
+                    "connected": bool(wr and not wr.is_closing()),
+                })
+            data.append({
+                "squad_id": sq_id + 1,
+                "leader_uid": state.get("leader_uid"),
+                "team_code": state.get("team_code"),
+                "member_ready": state.get("member_ready"),
+                "peers_count": len(state.get("peers", {})),
+                "peers": peers_list
+            })
+        return aiohttp.web.json_response(data)
+    except Exception as e:
+        return aiohttp.web.json_response({"error": str(e)}, status=500)
+
 async def api_state(request):
     return aiohttp.web.Response(text=json.dumps({
         "creating": bool(bot_state.creating),
@@ -4313,6 +4355,7 @@ async def start_web_server():
     app.router.add_post("/api/clanjoin", api_clanjoin)
     app.router.add_get("/api/stats", api_stats)
     app.router.add_get("/api/state", api_state)
+    app.router.add_get("/api/squads", api_squads)
     app.router.add_post("/api/create_team", api_create_team)
     app.router.add_post("/api/account/add", api_account_add)
     app.router.add_post("/api/account/delete", api_account_delete)
