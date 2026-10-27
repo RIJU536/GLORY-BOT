@@ -5,5 +5,7 @@ token_cache.json
 .local/
 .cache/
 cloudflared.exe
+tunnel.log
+accounts_backup.json
 
 

@@ -222,12 +222,45 @@ class BotState:
 
 bot_state = BotState()
 
-_team_state = {
-    "peers": {},
-    "leader_uid": None,
-    "team_code": None,
-    "lock": asyncio.Lock(),
-}
+_team_states: Dict[int, Dict[str, Any]] = {}
+
+def get_team_state(squad_id: int) -> Dict[str, Any]:
+    if squad_id not in _team_states:
+        _team_states[squad_id] = {
+            "peers": {},
+            "leader_uid": None,
+            "team_code": None,
+            "lock": asyncio.Lock(),
+        }
+    return _team_states[squad_id]
+
+# Backward-compatibility default
+_team_state = get_team_state(0)
+
+def get_squad_id_for_uid(uid_str: str) -> int:
+    try:
+        if os.path.exists(ACCOUNTS_FILE):
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                accs = json.load(f)
+            uids = [str(a.get("uid", "")) for a in accs if isinstance(a, dict)]
+            if uid_str in uids:
+                return uids.index(uid_str) // 2
+    except Exception:
+        pass
+    auth_uid = bot_state.game_to_auth_id.get(uid_str, uid_str)
+    try:
+        if os.path.exists(ACCOUNTS_FILE):
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                accs = json.load(f)
+            uids = [str(a.get("uid", "")) for a in accs if isinstance(a, dict)]
+            if auth_uid in uids:
+                return uids.index(auth_uid) // 2
+    except Exception:
+        pass
+    return 0
+
+def get_expected_squad_size(squad_id: int) -> int:
+    return 2
 
 _restart_state = {
     "lock": asyncio.Lock(),
@@ -945,10 +978,11 @@ async def ping_worker(account_id, token, release_version, region="BD", ping_url=
 
 
 # ==================== TEAM PACKETS (FIXED DUO JOIN) ====================
-def create_team(key, iv, game_version="1.132.9"):
+def create_team(key, iv, game_version="1.132.9", region="IND"):
+    reg = str(region).upper() if region else "IND"
     fields = {
         1: 1, 2: {2: bytes.fromhex("01"), 3:1, 4:3, 5:"en",
-            8: {1:"IDC3",2:123,3:"BD"}, 9:1,
+            8: {1:"IDC3",2:123,3:reg}, 9:1,
             10: bytes.fromhex("01090a0b1219202729"), 11:2, 13:1,
             14: {1:"08FBA33B4BABE2790205390333330000009700050092005F72697EB2134DCBB2467625142201040e38e848dc0e748c3f6aa04d81000000ff1113090dcacfa16d",
                  2:478, 3:"7e585d55", 4:"y[Z]", 6:12, 7:"15686677735a7506101c",
@@ -1736,6 +1770,9 @@ def cache_get(uid):
     if time.time() - e.get("cached_at",0) > TOKEN_CACHE_TTL:
         cache_invalidate(uid); return None
     if str(e.get("account_id","")).isdigit(): e["account_id"] = int(e["account_id"])
+    if isinstance(e.get("login_payload_data"), str):
+        try: e["login_payload_data"] = bytes.fromhex(e["login_payload_data"])
+        except Exception: pass
     if not isinstance(e.get("login_payload_data"), (bytes, bytearray)):
         cache_invalidate(uid); return None
     return e
@@ -1961,6 +1998,9 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
     _writer_ref = {"w": None}
     _team_active = {"flag": True}
     _match_played = {"flag": False}
+    squad_id = get_squad_id_for_uid(uid_str)
+    expected_squad_size = get_expected_squad_size(squad_id)
+    _team_state = get_team_state(squad_id)
 
     async def _process_social_packet(raw_bytes, tag="MAIN"):
         try:
@@ -2086,7 +2126,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             while True:
                 async with _team_state["lock"]:
                     n = len(_team_state["peers"])
-                if n >= TEAM_SIZE: break
+                if n >= expected_squad_size: break
                 if bot_state.is_paused(uid_str): return
                 await asyncio.sleep(0.5)
 
@@ -2097,7 +2137,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 peers_snapshot = dict(_team_state["peers"])
 
             if not is_leader:
-                print_info(f"[TEAM] {uid_str} waiting as member..."); return
+                print_info(f"[SQUAD {squad_id+1}] {uid_str} waiting as member..."); return
 
             while True:
                 _am = await _get_match_count(uid_str)
@@ -2107,7 +2147,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     return
                 await asyncio.sleep(3.0)
 
-            print_success(f"[TEAM] 👑 {uid_str} — creating team...")
+            print_success(f"[SQUAD {squad_id+1}] 👑 {uid_str} — creating squad team...")
 
             async with _team_state["lock"]:
                 _team_state["team_code"] = None
@@ -2119,7 +2159,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 except Exception: own_id_num = 0
 
             try:
-                pkt = create_team(current_key, current_iv, client_version)
+                pkt = create_team(current_key, current_iv, client_version, region=account_region)
                 if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                     _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
                     print_info(f"[TEAM] create_team sent ({len(pkt)}B)")
@@ -2156,7 +2196,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 try: peer_acc_id = peer_info["data"].get("account_id")
                 except Exception: pass
                 if not peer_acc_id: peer_acc_id = peer_uid
-                print_success(f"[TEAM] 📨 Inviting bot{invite_count+2} {peer_acc_id}...")
+                print_success(f"[SQUAD {squad_id+1}] 📨 Inviting bot{invite_count+2} {peer_acc_id}...")
                 await _invite_uid(int(peer_acc_id), f" bot{invite_count+2}")
                 invite_count += 1
 
@@ -2166,13 +2206,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 pkt = team_fresh(int(own_id_num), current_key, current_iv)
                 if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                     _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
-                    print_success(f"[TEAM] 🔄 team_fresh #2 sent ({len(pkt)}B)")
+                    print_success(f"[SQUAD {squad_id+1}] 🔄 team_fresh #2 sent ({len(pkt)}B)")
             except Exception as e:
-                print_warning(f"[TEAM] team_fresh #2 err: {e}")
+                print_warning(f"[SQUAD {squad_id+1}] team_fresh #2 err: {e}")
 
             await asyncio.sleep(1.0)
 
-            print_success(f"[TEAM] 🚀 {uid_str} loop: ready → 1s → start (every 5s)")
+            print_success(f"[SQUAD {squad_id+1}] 🚀 {uid_str} loop: ready → 1s → start (every 5s)")
             while _team_active["flag"]:
                 try:
                     if bot_state.is_paused(uid_str): break
@@ -2199,11 +2239,11 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
     async def _member_match_trigger():
         try:
-            await asyncio.sleep(TEAM_READY_DELAY + 6.0)
+            await asyncio.sleep(TEAM_READY_DELAY + 2.0)
             async with _team_state["lock"]:
                 if _team_state["leader_uid"] == uid_str:
                     return
-            print_success(f"[TEAM] 🚀 Member {uid_str} loop: auto-ready (every 3.5s)")
+            print_success(f"[SQUAD {squad_id+1}] 🚀 Member {uid_str} loop: auto-ready (every 3.5s)")
             my_id = current_account_data.get('account_id', uid_str) if current_account_data else uid_str
             joined_via_code = False
 
@@ -2225,7 +2265,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 _writer_ref["w"].write(jpkt)
                                 await _writer_ref["w"].drain()
                                 joined_via_code = True
-                                print_success(f"[TEAM] 🔑 Member {uid_str} joined via team_code {tc}")
+                                print_success(f"[SQUAD {squad_id+1}] 🔑 Member {uid_str} joined via team_code {tc}")
                                 await asyncio.sleep(0.8)
                             except Exception as e:
                                 print_warning(f"[TEAM] join_team_by_code err: {e}")
@@ -2269,7 +2309,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             fresh['account_id'], fresh['token'], fresh['server_time'],
                             current_key, current_iv,
                             region=fresh.get('region', account_region), typ='OnLine')
-                    else:
+                    elif not current_token or not current_key:
                         raise ConnectionError("Cache expired")
 
                 resolved_ip = await resolve_host_cloudflare(ip)
@@ -2306,7 +2346,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         "key": current_key, "iv": current_iv}
                     if _team_state["leader_uid"] is None or uid_str < str(_team_state["leader_uid"]):
                         _team_state["leader_uid"] = uid_str
-                        print_success(f"[TEAM] 👑 {uid_str} is leader")
+                        print_success(f"[SQUAD {squad_id+1}] 👑 {uid_str} is leader")
 
                 async def send_solo_start_match():
                     nonlocal search_attempts
@@ -2320,7 +2360,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 writer.write(rdy); await writer.drain()
                         except Exception: pass
                         await asyncio.sleep(1.0)
-                        await start_game_battle_royale("BD", client_version, writer, current_key, current_iv)
+                        await start_game_battle_royale(account_region, client_version, writer, current_key, current_iv)
                     except Exception as e:
                         print_warning(f"[!] Solo: {e}")
 
@@ -2393,7 +2433,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             if tc:
                                 async with _team_state["lock"]:
                                     _team_state["team_code"] = tc
-                                print_success(f"[TEAM] 📢 Team Code captured: {tc}")
+                                print_success(f"[SQUAD {squad_id+1}] 📢 Team Code captured: {tc}")
 
                             group_id = None
                             for gk in [8, 10, 9, 2]:
@@ -2421,7 +2461,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                         inviter = str((ldr_peer.get("data") or {}).get("account_id") or ldr)
 
                             if inviter and group_id and _team_state["leader_uid"] != uid_str:
-                                print_success(f"[TEAM] 📨 Invite from {inviter} (group={group_id}) → accepting...")
+                                print_success(f"[SQUAD {squad_id+1}] 📨 Invite from {inviter} (group={group_id}) → accepting...")
                                 for _ in range(2):
                                     try:
                                         acc = accept_team_invite(
@@ -2431,6 +2471,8 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                         if writer and not writer.is_closing():
                                             writer.write(acc)
                                             await writer.drain()
+                                            async with _team_state["lock"]:
+                                                _team_state.setdefault("members_in_team", set()).add(uid_str)
                                             print_success(f"[TEAM] ✅ accept sent ({len(acc)}B)")
                                     except Exception as e:
                                         print_warning(f"[TEAM] accept err: {e}")
@@ -2486,12 +2528,22 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                     bot_state.increment_match_started()
                                     bot_state.update_status(uid_str, "IN_MATCH", 1)
                                 except Exception: pass
+                                async with _team_state["lock"]:
+                                    _team_state["peers"].pop(uid_str, None)
+                                    _team_state.get("members_in_team", set()).discard(uid_str)
+                                    if _team_state.get("leader_uid") == uid_str:
+                                        _team_state["leader_uid"] = None
+                                        _team_state["team_code"] = None
                                 new_match = asyncio.create_task(
                                     play_game(server_ip_port, thunder, sharma, udp_key,
-                                              match_code, effective_acc_id, "BD",
+                                              match_code, effective_acc_id, account_region,
                                               client_version, current_key, current_iv,
                                               match_index=match_index))
                                 play_matches.append(new_match)
+                                try:
+                                    await new_match
+                                except Exception as e:
+                                    print_warning(f"[MATCH] match execution: {e}")
                                 try:
                                     writer.close()
                                     await writer.wait_closed()
@@ -3985,9 +4037,9 @@ async def api_stats(request):
             "matches_per_hour": matches_rate,
             "creating": bool(bot_state.creating),
             "create_progress": [str(x) for x in bot_state.create_progress[-40:]],
-            "team_code": _team_state.get("team_code"),
-            "leader_uid": _team_state.get("leader_uid"),
-            "team_size": len(_team_state["peers"]),
+            "team_code": ", ".join(str(s.get("team_code")) for s in _team_states.values() if s.get("team_code")),
+            "leader_uid": ", ".join(str(s.get("leader_uid")) for s in _team_states.values() if s.get("leader_uid")),
+            "team_size": sum(len(s["peers"]) for s in _team_states.values()),
             "restart_finished": len(_restart_state["finished_bots"]),
             "restart_target": _restart_state["target"],
             "restarting": _restart_state["restarting"],
@@ -4002,7 +4054,7 @@ async def api_state(request):
         "creating": bool(bot_state.creating),
         "create_progress": [str(x) for x in bot_state.create_progress[-40:]],
         "accounts": list(bot_state.accounts.values()),
-        "team_size": len(_team_state["peers"]),
+        "team_size": sum(len(s["peers"]) for s in _team_states.values()),
     }, default=str, ensure_ascii=False), content_type="application/json", charset="utf-8")
 
 async def api_progress(request):
