@@ -2281,8 +2281,9 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     async with _team_state["lock"]:
                         is_partner_ready = bool(_team_state.get("member_ready", False))
 
-                    # STRICT DUO: Never start match solo! Auto re-invite partner if not joined
-                    if not is_partner_ready:
+                    # STRICT DUO: Never start match solo! Must have partner in team and ready!
+                    joined_members = len(_team_state.get("members_in_team", set()))
+                    if (not is_partner_ready) or (joined_members < 1):
                         wait_partner_ticks += 1
                         # Re-invite partner bot every 6 seconds
                         if wait_partner_ticks % 3 == 0:
@@ -2459,37 +2460,15 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     else:
                         print_success(f"[SQUAD {squad_id+1}] 🛡️ Member {uid_str} joined lobby")
 
-                async def send_solo_start_match():
-                    return
-                    try:
-                        await asyncio.sleep(random.uniform(0.2, 0.4))
-                        try:
-                            own_id = current_account_data.get('account_id') if current_account_data else uid_str
-                            rdy = ready_for_game(int(own_id), current_key, current_iv)
-                            if writer and not writer.is_closing():
-                                writer.write(rdy); await writer.drain()
-                        except Exception: pass
-                        await asyncio.sleep(1.0)
-                        await start_game_battle_royale(account_region, client_version, writer, current_key, current_iv)
-                    except Exception as e:
-                        print_warning(f"[!] Solo: {e}")
-
                 if not _match_played["flag"]:
-                    if not TEAM_MODE: await send_solo_start_match()
-                    if TEAM_MODE:
-                        if is_leader:
-                            team_coord_task = asyncio.create_task(_team_coordinator())
-                        else:
-                            member_trigger_task = asyncio.create_task(_member_match_trigger())
+                    if is_leader:
+                        team_coord_task = asyncio.create_task(_team_coordinator())
+                    else:
+                        member_trigger_task = asyncio.create_task(_member_match_trigger())
 
                 while True:
                     play_matches[:] = [m for m in play_matches if not m.done()]
                     if bot_state.is_paused(uid_str): break
-
-                    now = asyncio.get_running_loop().time()
-                    if not TEAM_MODE and len(play_matches) == 0 and (now - last_start_time >= START_MATCH_INTERVAL):
-                        await send_solo_start_match()
-                        last_start_time = now
 
                     try:
                         data = await asyncio.wait_for(reader.read(8192), timeout=0.5)
