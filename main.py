@@ -88,8 +88,8 @@ PING_URL         = "https://loginbp.ppmainecoonghj.com/Ping"
 PING_REAL_IP     = "103.109.214.211"
 NEW_MATCH_DELAY = 1.0
 MAX_CONCURRENT_MATCHES = 20
-MAX_MATCH_DURATION = 65.0
-MATCH_IDLE_TIMEOUT  = 10.0
+MAX_MATCH_DURATION = 360.0
+MATCH_IDLE_TIMEOUT  = 45.0
 
 _accept_friend_request = True
 DEBUG_ALL_PACKETS = False
