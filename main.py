@@ -2273,21 +2273,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     async with _team_state["lock"]:
                         is_partner_ready = bool(_team_state.get("member_ready", False))
 
-                    # STRICT DUO: Never start match solo! Auto re-invite if partner not joined after reasonable wait
+                    # STRICT DUO: Never start match solo! Auto re-invite partner if not joined
                     if not is_partner_ready:
                         wait_partner_ticks += 1
-                        # Wait 30 seconds (15 ticks * 2s) before re-syncing team to prevent disband spam!
-                        if wait_partner_ticks % 15 == 0:
-                            print_info(f"[SQUAD {squad_id+1}] 🔄 Leader {uid_str} re-syncing team & inviting partner...")
-                            try:
-                                pkt = create_team(current_key, current_iv, client_version, region=account_region)
-                                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                    _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
-                                await asyncio.sleep(0.8)
-                                pkt2 = team_fresh(int(own_id_num), current_key, current_iv)
-                                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                    _writer_ref["w"].write(pkt2); await _writer_ref["w"].drain()
-                            except Exception: pass
+                        # DO NOT re-create the team! The lobby and team code are permanently active.
+                        # Re-invite partner bot every 8 seconds
+                        if wait_partner_ticks % 4 == 0:
+                            print_info(f"[SQUAD {squad_id+1}] ⏳ Leader {uid_str} waiting for partner (re-inviting)...")
                             for t_uid in targets_to_invite:
                                 await _invite_uid(int(t_uid), " retry")
                         await asyncio.sleep(2.0)
@@ -2310,27 +2302,18 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                     await asyncio.sleep(0.8)
 
-                    # Send start_match_team (lobby start)
+                    # Send start_match_team (Pure Lone Wolf Duo mode 410)
                     try:
                         sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
                         if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                             _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
+                            print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} sent DUO start_match (holding 35s queue)...")
                     except Exception as e:
                         print_warning(f"[TEAM] start_match err: {e}")
 
-                    await asyncio.sleep(0.5)
-
-                    # Send start_game_battle_royale (actual matchmaking queue trigger)
-                    try:
-                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                            await start_game_battle_royale(account_region, client_version, _writer_ref["w"], current_key, current_iv)
-                            print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} queued DUO match! Waiting for match found (45s hold)...")
-                    except Exception as e:
-                        print_warning(f"[TEAM] battle_royale_queue err: {e}")
-
-                    # HOLD in matchmaking queue for 45s to prevent cancelling the search!
+                    # HOLD in matchmaking queue for 35s to allow Garena server to match opponents without cancel!
                     search_start = time.time()
-                    while _team_active["flag"] and (time.time() - search_start < 45.0):
+                    while _team_active["flag"] and (time.time() - search_start < 35.0):
                         if bot_state.is_paused(uid_str): break
                         await asyncio.sleep(1.0)
 
