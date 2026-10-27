@@ -2214,6 +2214,8 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
             print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} loop: ready -> start (auto duo sync)")
             wait_partner_ticks = 0
+            search_sent = False
+            search_sent_time = 0.0
             while _team_active["flag"]:
                 try:
                     if bot_state.is_paused(uid_str): break
@@ -2222,6 +2224,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                     # STRICT DUO: Never start match solo! Auto re-create squad team if partner not joined
                     if not is_partner_ready:
+                        search_sent = False
                         wait_partner_ticks += 1
                         if wait_partner_ticks % 4 == 0:
                             print_info(f"[SQUAD {squad_id+1}] 🔄 Leader {uid_str} re-syncing team & inviting partner...")
@@ -2247,30 +2250,34 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         continue
 
                     wait_partner_ticks = 0
-                    own_id = current_account_data.get('account_id', own_id_num) if current_account_data else own_id_num
-                    try:
-                        rdy = ready_for_game(int(own_id), current_key, current_iv)
-                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                            _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
-                    except Exception as e:
-                        print_warning(f"[TEAM] ready_for_game err: {e}")
-                    await asyncio.sleep(0.5)
-                    try:
-                        sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
-                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                            _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
-                    except Exception as e:
-                        print_warning(f"[TEAM] start_match err: {e}")
-                    await asyncio.sleep(0.5)
-                    try:
-                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                            await start_game_battle_royale(account_region, client_version, _writer_ref["w"], current_key, current_iv)
-                            print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} queued DUO match search with partner!")
-                    except Exception as e:
-                        print_warning(f"[TEAM] start_game_battle_royale err: {e}")
+                    now = time.time()
+                    if not search_sent or (now - search_sent_time > 35.0):
+                        own_id = current_account_data.get('account_id', own_id_num) if current_account_data else own_id_num
+                        try:
+                            rdy = ready_for_game(int(own_id), current_key, current_iv)
+                            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                                _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
+                        except Exception as e:
+                            print_warning(f"[TEAM] ready_for_game err: {e}")
+                        await asyncio.sleep(0.5)
+                        try:
+                            sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
+                            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                                _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
+                        except Exception as e:
+                            print_warning(f"[TEAM] start_match err: {e}")
+                        await asyncio.sleep(0.5)
+                        try:
+                            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                                await start_game_battle_royale(account_region, client_version, _writer_ref["w"], current_key, current_iv)
+                                print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} queued DUO match search with partner!")
+                                search_sent = True
+                                search_sent_time = now
+                        except Exception as e:
+                            print_warning(f"[TEAM] start_game_battle_royale err: {e}")
                 except Exception as e:
                     print_warning(f"[TEAM] start_match err: {e}")
-                try: await asyncio.wait_for(asyncio.sleep(4.5), timeout=5.0)
+                try: await asyncio.wait_for(asyncio.sleep(3.0), timeout=3.5)
                 except asyncio.TimeoutError: pass
         except asyncio.CancelledError: raise
         except Exception as e:
@@ -2314,13 +2321,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                     _team_state["member_ready"] = True
                             except Exception as e:
                                 print_warning(f"[TEAM] join_team_by_code err: {e}")
-                        elif is_rdy:
-                            try:
-                                rdy = ready_for_game(int(my_id), current_key, current_iv)
-                                _writer_ref["w"].write(rdy)
-                                await _writer_ref["w"].drain()
-                            except Exception:
-                                pass
+
                 except Exception as e:
                     print_warning(f"[TEAM] member trigger: {e}")
                 try:
@@ -2519,7 +2520,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 squad_ldr_acc = str((squad_ldr_peer.get("data") or {}).get("account_id") or squad_ldr or "")
 
                             # Strict Duo Security: reject invites from stranger / external players
-                            if inviter and (inviter != str(squad_ldr) and inviter != str(squad_ldr_acc)):
+                            if not is_leader and inviter and (inviter != str(squad_ldr) and inviter != str(squad_ldr_acc)):
                                 print_warning(f"[SQUAD {squad_id+1}] ⚠️ Ignored external invite from {inviter} (my squad leader is {squad_ldr})")
                                 inviter = None
 
@@ -2554,69 +2555,71 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             print_warning(f"[TEAM] 0500 parse: {e}")
                         continue
 
-                    if hex_data.startswith("0300") and 10 < packet_length < 30:
-                        continue
+                    p300_idx = hex_data.find("0300")
+                    if p300_idx != -1 and packet_length > 10:
+                        slice_300 = hex_data[p300_idx:]
+                        if 10 < len(slice_300) < 60:
+                            continue
+                        if len(slice_300) >= 200:
+                            print_success(f"[⚔] Match Found | UID: {uid_str}")
+                            for tk in (team_coord_task, member_trigger_task):
+                                if tk and not tk.done():
+                                    tk.cancel()
+                            team_coord_task = None
+                            member_trigger_task = None
+                            _team_active["flag"] = False
 
-                    if hex_data.startswith("0300") and packet_length >= 300:
-                        print_success(f"[⚔] Match Found | UID: {uid_str}")
-                        for tk in (team_coord_task, member_trigger_task):
-                            if tk and not tk.done():
-                                tk.cancel()
-                        team_coord_task = None
-                        member_trigger_task = None
-                        _team_active["flag"] = False
-
-                        try:
-                            res = json.loads(await decode_protobuf_async(hex_data[10:]))
-                            token = udp_key = match_code = server_ip_port = None
-                            match_account_id = block_val = None
-                            if '42' in res and 'data' in res['42']: match_code = res['42']['data']
-                            if '5' in res and 'data' in res['5']:
-                                rf5 = res['5']['data']
-                                server_ip_port = rf5.get('2', {}).get('data')
-                                udp_key = rf5.get('3', {}).get('data')
-                                token = rf5.get('4', {}).get('data')
-                                if '42' in rf5: match_code = rf5['42']['data']
-                            if '1' in res and 'data' in res['1']: match_account_id = res['1']['data']
-                            if '5' in res and 'data' in res['5']:
-                                block_val = res['5']['data'].get('1', {}).get('data')
-                            effective_acc_id = match_account_id or account_id or "BD_BOT"
-                            if token and udp_key and match_code and server_ip_port:
-                                acc_tok = current_account_data.get('access_token', '') if current_account_data else ""
-                                thunder, sharma = await build_match_startup_packets(
-                                    token, udp_key, match_code, effective_acc_id, block_val or 0,
-                                    server_ip=server_ip_port, region=account_region,
-                                    client_version=client_version, access_token=acc_tok,
-                                    mode_id=1, map_id=1)
-                                match_index = await _inc_match(uid_str)
-                                try:
-                                    bot_state.increment_match_started()
-                                    bot_state.update_status(uid_str, "IN_MATCH", 1)
-                                except Exception: pass
-                                async with _team_state["lock"]:
-                                    _team_state["peers"].pop(uid_str, None)
-                                    _team_state.get("members_in_team", set()).discard(uid_str)
-                                    _team_state["member_ready"] = False
-                                    if is_leader:
-                                        _team_state["team_code"] = None
-                                new_match = asyncio.create_task(
-                                    play_game(server_ip_port, thunder, sharma, udp_key,
-                                              match_code, effective_acc_id, account_region,
-                                              client_version, current_key, current_iv,
-                                              match_index=match_index))
-                                play_matches.append(new_match)
-                                try:
-                                    await asyncio.wait_for(new_match, timeout=MAX_MATCH_DURATION + 10.0)
-                                except Exception as e:
-                                    print_warning(f"[MATCH] match execution: {e}")
-                                try:
-                                    writer.close()
-                                    await writer.wait_closed()
-                                except Exception: pass
-                                await asyncio.sleep(NEW_MATCH_DELAY)
-                                break
-                        except Exception as e:
-                            print_warning(f"[MATCH] {e}"); continue
+                            try:
+                                res = json.loads(await decode_protobuf_async(slice_300[10:]))
+                                token = udp_key = match_code = server_ip_port = None
+                                match_account_id = block_val = None
+                                if '42' in res and 'data' in res['42']: match_code = res['42']['data']
+                                if '5' in res and 'data' in res['5']:
+                                    rf5 = res['5']['data']
+                                    server_ip_port = rf5.get('2', {}).get('data')
+                                    udp_key = rf5.get('3', {}).get('data')
+                                    token = rf5.get('4', {}).get('data')
+                                    if '42' in rf5: match_code = rf5['42']['data']
+                                if '1' in res and 'data' in res['1']: match_account_id = res['1']['data']
+                                if '5' in res and 'data' in res['5']:
+                                    block_val = res['5']['data'].get('1', {}).get('data')
+                                effective_acc_id = match_account_id or account_id or "BD_BOT"
+                                if token and udp_key and match_code and server_ip_port:
+                                    acc_tok = current_account_data.get('access_token', '') if current_account_data else ""
+                                    thunder, sharma = await build_match_startup_packets(
+                                        token, udp_key, match_code, effective_acc_id, block_val or 0,
+                                        server_ip=server_ip_port, region=account_region,
+                                        client_version=client_version, access_token=acc_tok,
+                                        mode_id=1, map_id=1)
+                                    match_index = await _inc_match(uid_str)
+                                    try:
+                                        bot_state.increment_match_started()
+                                        bot_state.update_status(uid_str, "IN_MATCH", 1)
+                                    except Exception: pass
+                                    async with _team_state["lock"]:
+                                        _team_state["peers"].pop(uid_str, None)
+                                        _team_state.get("members_in_team", set()).discard(uid_str)
+                                        _team_state["member_ready"] = False
+                                        if is_leader:
+                                            _team_state["team_code"] = None
+                                    new_match = asyncio.create_task(
+                                        play_game(server_ip_port, thunder, sharma, udp_key,
+                                                  match_code, effective_acc_id, account_region,
+                                                  client_version, current_key, current_iv,
+                                                  match_index=match_index))
+                                    play_matches.append(new_match)
+                                    try:
+                                        await asyncio.wait_for(new_match, timeout=MAX_MATCH_DURATION + 10.0)
+                                    except Exception as e:
+                                        print_warning(f"[MATCH] match execution: {e}")
+                                    try:
+                                        writer.close()
+                                        await writer.wait_closed()
+                                    except Exception: pass
+                                    await asyncio.sleep(NEW_MATCH_DELAY)
+                                    break
+                            except Exception as e:
+                                print_warning(f"[MATCH] {e}"); continue
 
                     if 30 <= packet_length <= 40:
                         continue
