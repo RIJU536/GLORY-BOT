@@ -230,7 +230,6 @@ def get_team_state(squad_id: int) -> Dict[str, Any]:
             "peers": {},
             "leader_uid": None,
             "team_code": None,
-            "members_in_team": set(),
             "member_ready": False,
             "lock": asyncio.Lock(),
         }
@@ -2205,7 +2204,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             async with _team_state["lock"]:
                 _team_state["team_code"] = None
                 _team_state["member_ready"] = False
-                _team_state["members_in_team"] = set()
 
             own_id_num = None
             if current_account_data: own_id_num = current_account_data.get('account_id')
@@ -2214,31 +2212,24 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 except Exception: own_id_num = 0
 
             try:
-                leave_pkt = leave_team(int(own_id_num), current_key, current_iv)
-                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                    _writer_ref["w"].write(leave_pkt); await _writer_ref["w"].drain()
-            except Exception: pass
-            await asyncio.sleep(0.5)
-
-            try:
                 pkt = create_team(current_key, current_iv, client_version, region=account_region)
                 if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                     _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
-                    print_info(f"[TEAM] create_team sent ({len(pkt)}B)")
+                    print_info(f"[DUO {squad_id+1}] create_team sent ({len(pkt)}B)")
             except Exception as e:
-                print_error(f"[TEAM] create_team err: {e}")
+                print_error(f"[DUO {squad_id+1}] create_team err: {e}")
 
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(1.5)
 
             try:
                 pkt = team_fresh(int(own_id_num), current_key, current_iv)
                 if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                     _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
-                    print_success(f"[TEAM] 🔄 team_fresh #1 sent ({len(pkt)}B)")
+                    print_success(f"[DUO {squad_id+1}] 🔄 team_fresh #1 sent ({len(pkt)}B)")
             except Exception as e:
-                print_warning(f"[TEAM] team_fresh err: {e}")
+                print_warning(f"[DUO {squad_id+1}] team_fresh err: {e}")
 
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(1.0)
 
             async def _invite_uid(target_uid, label=""):
                 for attempt in range(2):
@@ -2246,12 +2237,12 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         inv = invite_player_in_team(int(target_uid), current_key, current_iv, region=account_region)
                         if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                             _writer_ref["w"].write(inv); await _writer_ref["w"].drain()
-                            print_info(f"[TEAM]   invite{label} to {target_uid} #{attempt+1} ({len(inv)}B)")
+                            print_info(f"[DUO {squad_id+1}]   invite{label} to {target_uid} #{attempt+1} ({len(inv)}B)")
                     except Exception as e:
-                        print_warning(f"[TEAM] invite err: {e}")
-                    await asyncio.sleep(0.5)
+                        print_warning(f"[DUO {squad_id+1}] invite err: {e}")
+                    await asyncio.sleep(0.6)
 
-            # Partner discovery from accounts.json
+            # Partner discovery from accounts.json & peers
             acc_idx = get_account_index_for_uid(uid_str, current_account_data)
             partner_idx, partner_auth_uid = get_squad_partner_info(acc_idx)
             partner_game_id = bot_state.auth_to_game_id.get(partner_auth_uid)
@@ -2271,105 +2262,70 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 print_success(f"[DUO {squad_id+1}] 📨 Inviting partner bot {t_uid}...")
                 await _invite_uid(int(t_uid), " partner")
 
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(TEAM_INVITE_WAIT + 3.0)
 
-            print_success(f"[DUO {squad_id+1}] 🚀 Leader {uid_str} loop: ready -> start (auto duo sync)")
+            try:
+                pkt = team_fresh(int(own_id_num), current_key, current_iv)
+                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                    _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
+                    print_success(f"[DUO {squad_id+1}] 🔄 team_fresh #2 sent ({len(pkt)}B)")
+            except Exception as e:
+                print_warning(f"[DUO {squad_id+1}] team_fresh #2 err: {e}")
+
+            await asyncio.sleep(1.0)
+
+            print_success(f"[DUO {squad_id+1}] 🚀 Leader {uid_str} loop: ready → 1s → start (every 5s)")
             wait_partner_ticks = 0
             while _team_active["flag"]:
                 try:
                     if bot_state.is_paused(uid_str): break
                     async with _team_state["lock"]:
-                        is_partner_ready = bool(_team_state.get("member_ready", False))
+                        if _team_state["leader_uid"] != uid_str: break
                         tc = _team_state.get("team_code")
-                        joined_members = len(_team_state.get("members_in_team", set()))
+                        is_partner_ready = bool(_team_state.get("member_ready", False))
 
-                    # If team code was never captured, re-trigger team creation!
-                    if not tc:
+                    # STRICT DUO: Must have partner ready before starting match!
+                    if not is_partner_ready or not tc:
                         wait_partner_ticks += 1
-                        if wait_partner_ticks % 3 == 0:
-                            print_info(f"[DUO {squad_id+1}] 🔄 Team code missing, regenerating duo lobby...")
-                            try:
-                                leave_pkt = leave_team(int(own_id_num), current_key, current_iv)
-                                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                    _writer_ref["w"].write(leave_pkt); await _writer_ref["w"].drain()
-                            except Exception: pass
-                            await asyncio.sleep(0.5)
-                            try:
-                                pkt = create_team(current_key, current_iv, client_version, region=account_region)
-                                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                    _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
-                            except Exception: pass
-                            await asyncio.sleep(0.8)
-                            try:
-                                pkt = team_fresh(int(own_id_num), current_key, current_iv)
-                                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                    _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
-                            except Exception: pass
-                        await asyncio.sleep(2.0)
-                        continue
-
-                    # STRICT DUO: Never start match solo! Must have partner in team and ready!
-                    if (not is_partner_ready) or (joined_members < 1):
-                        wait_partner_ticks += 1
-                        # Re-invite partner bot every 6 seconds
-                        if wait_partner_ticks % 3 == 0:
-                            print_info(f"[DUO {squad_id+1}] ⏳ Leader {uid_str} waiting for partner (re-inviting)...")
+                        if wait_partner_ticks % 4 == 0:
+                            print_info(f"[DUO {squad_id+1}] ⏳ Leader {uid_str} waiting for partner ready (tc={tc}, rdy={is_partner_ready})...")
                             for t_uid in targets_to_invite:
                                 await _invite_uid(int(t_uid), " retry")
                         await asyncio.sleep(2.0)
                         continue
 
-                    # Partner IS ready!
                     wait_partner_ticks = 0
                     own_id = current_account_data.get('account_id', own_id_num) if current_account_data else own_id_num
 
-                    # Send Leader Ready confirmations (both 0519 and 0515 cmd 15)
                     try:
-                        rdy19 = ready_for_game(int(own_id), current_key, current_iv)
-                        rdy15 = create_packet(create_proto({1: 15, 2: {1: int(own_id), 2: 1}}).hex(), "0515", current_key, current_iv)
+                        rdy = ready_for_game(int(own_id), current_key, current_iv)
                         if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                            _writer_ref["w"].write(rdy19)
-                            _writer_ref["w"].write(rdy15)
-                            await _writer_ref["w"].drain()
+                            _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
                     except Exception as e:
-                        print_warning(f"[TEAM] leader ready err: {e}")
+                        print_warning(f"[DUO {squad_id+1}] ready_for_game err: {e}")
 
-                    await asyncio.sleep(0.8)
+                    await asyncio.sleep(1.0)
 
-                    # Send start_match_team (Pure Lone Wolf Duo mode 410)
-                    try:
-                        sm = start_match_team(int(own_id), current_key, current_iv, region=account_region, mode_id=410)
-                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                            _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
-                            print_success(f"[DUO {squad_id+1}] 🚀 Leader {uid_str} sent DUO start_match (holding queue)...")
-                    except Exception as e:
-                        print_warning(f"[TEAM] start_match err: {e}")
-
-                    # HOLD in matchmaking queue for 20s to allow Garena server to match opponents without cancel!
-                    search_start = time.time()
-                    while _team_active["flag"] and (time.time() - search_start < 20.0):
-                        if bot_state.is_paused(uid_str): break
-                        await asyncio.sleep(1.0)
-
+                    sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
+                    if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                        _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
+                        print_success(f"[DUO {squad_id+1}] 🚀 Leader {uid_str} sent DUO start_match")
                 except Exception as e:
-                    print_warning(f"[TEAM] start_match loop err: {e}")
-                    await asyncio.sleep(3.0)
+                    print_warning(f"[DUO {squad_id+1}] start_match err: {e}")
+                try: await asyncio.wait_for(asyncio.sleep(5.0), timeout=5.5)
+                except asyncio.TimeoutError: pass
         except asyncio.CancelledError: raise
         except Exception as e:
-            print_error(f"[TEAM] coordinator error: {e}")
+            print_error(f"[DUO {squad_id+1}] coordinator error: {e}")
 
     async def _member_match_trigger():
         try:
             if is_leader:
                 return
-            print_success(f"[DUO {squad_id+1}] 🛡️ Member {uid_str} loop active (auto-ready & team-code join)")
+            await asyncio.sleep(TEAM_READY_DELAY + 4.0)
+            print_success(f"[DUO {squad_id+1}] 🚀 Member {uid_str} loop: auto-ready (every 3.5s)")
             my_id = current_account_data.get('account_id', uid_str) if current_account_data else uid_str
-            last_joined_tc = None
-            try:
-                leave_pkt = leave_team(int(my_id), current_key, current_iv)
-                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                    _writer_ref["w"].write(leave_pkt); await _writer_ref["w"].drain()
-            except Exception: pass
+            joined_via_code = False
 
             while _team_active["flag"]:
                 try:
@@ -2378,61 +2334,37 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     if await _get_match_count(uid_str) >= MAX_CONCURRENT_MATCHES:
                         await asyncio.sleep(3.0)
                         continue
-
                     if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                         async with _team_state["lock"]:
                             tc = _team_state.get("team_code")
-                            is_rdy = bool(_team_state.get("member_ready", False))
-
-                        # If we have a team code and haven't joined or code changed:
-                        if tc and last_joined_tc != tc:
+                        if tc and not joined_via_code:
                             try:
                                 jpkt = join_team_by_code(
                                     tc, current_key, current_iv,
                                     region=account_region, game_version=client_version)
                                 _writer_ref["w"].write(jpkt)
                                 await _writer_ref["w"].drain()
-                                last_joined_tc = tc
+                                joined_via_code = True
                                 print_success(f"[DUO {squad_id+1}] 🔑 Member {uid_str} joined via team_code {tc}")
-                                # Wait for Garena server to register member in room
-                                await asyncio.sleep(1.5)
-
-                                # Confirm ready (both 0519 and 0515 cmd 15)
-                                rdy19 = ready_for_game(int(my_id), current_key, current_iv)
-                                rdy15 = create_packet(create_proto({1: 15, 2: {1: int(my_id), 2: 1}}).hex(), "0515", current_key, current_iv)
-                                _writer_ref["w"].write(rdy19)
-                                _writer_ref["w"].write(rdy15)
-                                await _writer_ref["w"].drain()
-
-                                # Brief grace period before signaling Leader
                                 await asyncio.sleep(1.0)
-                                async with _team_state["lock"]:
-                                    _team_state["member_ready"] = True
-                                    _team_state.setdefault("members_in_team", set()).add(uid_str)
-                                print_success(f"[DUO {squad_id+1}] ✅ Member {uid_str} confirmed READY in room")
                             except Exception as e:
-                                print_warning(f"[TEAM] join_team_by_code err: {e}")
+                                print_warning(f"[DUO {squad_id+1}] join_team_by_code err: {e}")
 
-                        # Maintain Ready heartbeat every 3.5s so Garena server never marks member AFK or unready
-                        if tc and last_joined_tc == tc:
-                            try:
-                                rdy19 = ready_for_game(int(my_id), current_key, current_iv)
-                                _writer_ref["w"].write(rdy19)
-                                await _writer_ref["w"].drain()
-                                async with _team_state["lock"]:
-                                    _team_state["member_ready"] = True
-                                    _team_state.setdefault("members_in_team", set()).add(uid_str)
-                            except Exception: pass
-
+                        rdy = ready_for_game(int(my_id), current_key, current_iv)
+                        _writer_ref["w"].write(rdy)
+                        await _writer_ref["w"].drain()
+                        async with _team_state["lock"]:
+                            _team_state["member_ready"] = True
                 except Exception as e:
-                    print_warning(f"[TEAM] member trigger: {e}")
-
-                await asyncio.sleep(3.5)
+                    print_warning(f"[DUO {squad_id+1}] member trigger: {e}")
+                try:
+                    await asyncio.wait_for(asyncio.sleep(3.5), timeout=4.0)
+                except asyncio.TimeoutError:
+                    pass
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print_warning(f"[TEAM] member trigger outer: {e}")
-
+            print_warning(f"[DUO {squad_id+1}] member trigger outer: {e}")
     try:
         while True:
             while bot_state.is_paused(uid_str):
@@ -2522,21 +2454,14 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     if hex_data.startswith("0600") and packet_length > 20:
                         await _process_social_packet(data, tag="MAIN"); continue
 
-                    # 0500/0515/0518/0514: team/invite (MULTI-OFFSET DUO JOIN)
-                    if any(op in hex_data for op in ["0500", "0515", "0518", "0514", "0501"]) and packet_length > 10:
+                    # 0500: team/invite (FIXED DUO JOIN from GOJOGLORY1)
+                    if hex_data.startswith("0500") and packet_length > 10:
                         try:
-                            p_off = -1
-                            for op in ["0500", "0515", "0518", "0514", "0501"]:
-                                idx = hex_data.find(op)
-                                if idx != -1:
-                                    p_off = idx
-                                    break
-                            slice_hex = hex_data[p_off:]
                             dec = None
-                            for off in (10, 12, 8, 6, 14, 16, 4, 18, 20):
-                                if len(slice_hex) <= off:
+                            for off in (10, 12, 8, 6, 14, 16):
+                                if len(hex_data) <= off:
                                     continue
-                                inner = bytes.fromhex(slice_hex[off:])
+                                inner = bytes.fromhex(hex_data[off:])
                                 cand = decode_protobuf_dict(inner)
                                 if not cand:
                                     alt = decode_protobuf_2(inner)
@@ -2549,6 +2474,16 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 continue
 
                             tc = extract_team_code_from_proto(dec)
+                            if not tc:
+                                f5w = dec.get("5") or dec.get(5)
+                                f5 = f5w.get("data") if isinstance(f5w, dict) and "data" in f5w else f5w
+                                if not isinstance(f5, dict): f5 = dec
+                                for fk in [11, 5, 1, 3, 2, 4]:
+                                    c_val = f5.get(fk) if fk in f5 else f5.get(str(fk))
+                                    if isinstance(c_val, dict) and "data" in c_val: c_val = c_val["data"]
+                                    if c_val and str(c_val).isdigit() and len(str(c_val)) == 7:
+                                        tc = str(c_val)
+                                        break
                             if tc:
                                 is_new_tc = False
                                 async with _team_state["lock"]:
@@ -2556,19 +2491,16 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                         _team_state["team_code"] = tc
                                         is_new_tc = True
                                 if is_new_tc:
-                                    print_success(f"[SQUAD {squad_id+1}] 📢 Team Code captured: {tc}")
+                                    print_success(f"[DUO {squad_id+1}] 📢 Team Code captured: {tc}")
 
                             f5w = dec.get("5") or dec.get(5)
                             f5 = f5w.get("data") if isinstance(f5w, dict) and "data" in f5w else f5w
-                            if not isinstance(f5, dict):
-                                f5 = dec
+                            if not isinstance(f5, dict): f5 = dec
 
                             def _f5g(k):
-                                if not isinstance(f5, dict):
-                                    return None
+                                if not isinstance(f5, dict): return None
                                 v = f5.get(k) if k in f5 else f5.get(str(k))
-                                if isinstance(v, dict) and "data" in v:
-                                    return v["data"]
+                                if isinstance(v, dict) and "data" in v: return v["data"]
                                 return v
 
                             group_id = None
@@ -2613,11 +2545,11 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                             # Strict Duo Security: reject invites from stranger / external players
                             if not is_leader and inviter and (inviter not in valid_leader_ids):
-                                print_warning(f"[SQUAD {squad_id+1}] ⚠️ Ignored external invite from {inviter} (my squad leader is {valid_leader_ids})")
+                                print_warning(f"[DUO {squad_id+1}] ⚠️ Ignored external invite from {inviter} (my squad leader is {valid_leader_ids})")
                                 inviter = None
 
                             if inviter and group_id and not is_leader:
-                                print_success(f"[SQUAD {squad_id+1}] 📨 Invite from squad leader {inviter} (group={group_id}) → accepting...")
+                                print_success(f"[DUO {squad_id+1}] 📨 Invite from squad leader {inviter} (group={group_id}) → accepting...")
                                 for _ in range(2):
                                     try:
                                         acc = accept_team_invite(
@@ -2627,45 +2559,40 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                         if writer and not writer.is_closing():
                                             writer.write(acc)
                                             await writer.drain()
-                                            async with _team_state["lock"]:
-                                                _team_state.setdefault("members_in_team", set()).add(uid_str)
-                                            print_success(f"[TEAM] ✅ accept sent ({len(acc)}B)")
+                                            print_success(f"[DUO {squad_id+1}] ✅ accept sent ({len(acc)}B)")
                                     except Exception as e:
-                                        print_warning(f"[TEAM] accept err: {e}")
+                                        print_warning(f"[DUO {squad_id+1}] accept err: {e}")
                                     await asyncio.sleep(0.4)
 
                                 try:
-                                    rdy19 = ready_for_game(int(own_acc), current_key, current_iv)
-                                    rdy15 = create_packet(create_proto({1: 15, 2: {1: int(own_acc), 2: 1}}).hex(), "0515", current_key, current_iv)
+                                    rdy = ready_for_game(int(own_acc), current_key, current_iv)
                                     if writer and not writer.is_closing():
-                                        writer.write(rdy19)
-                                        writer.write(rdy15)
+                                        writer.write(rdy)
                                         await writer.drain()
                                         async with _team_state["lock"]:
                                             _team_state["member_ready"] = True
-                                            _team_state.setdefault("members_in_team", set()).add(uid_str)
                                         print_success(f"[DUO {squad_id+1}] ✅ Member {uid_str} confirmed READY")
                                 except Exception:
                                     pass
                         except Exception as e:
-                            print_warning(f"[TEAM] 0500 parse: {e}")
+                            print_warning(f"[DUO {squad_id+1}] 0500 parse: {e}")
                         continue
 
-                    # 0300: Match Found packet from game gateway
-                    is_match_packet = False
-                    slice_300 = ""
-                    if hex_data.startswith("0300") and packet_length >= 200:
-                        is_match_packet = True
-                        slice_300 = hex_data
-                    elif ("0300" in hex_data) and packet_length >= 300:
-                        p300_idx = hex_data.find("0300")
-                        if p300_idx != -1 and len(hex_data[p300_idx:]) >= 200:
-                            slice_300 = hex_data[p300_idx:]
-                            is_match_packet = True
+                    # 0300: Match Found packet from game gateway (from GOJOGLORY1)
+                    if hex_data.startswith("0300") and 10 < packet_length < 30:
+                        continue
 
-                    if is_match_packet:
+                    if hex_data.startswith("0300") and packet_length >= 250:
+                        print_success(f"[⚔] Match Found | UID: {uid_str}")
+                        for tk in (team_coord_task, member_trigger_task):
+                            if tk and not tk.done():
+                                tk.cancel()
+                        team_coord_task = None
+                        member_trigger_task = None
+                        _team_active["flag"] = False
+
                         try:
-                            res = json.loads(await decode_protobuf_async(slice_300[10:]))
+                            res = json.loads(await decode_protobuf_async(hex_data[10:]))
                             token = udp_key = match_code = server_ip_port = None
                             match_account_id = block_val = None
                             if '42' in res and 'data' in res['42']: match_code = res['42']['data']
@@ -2682,14 +2609,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                             # STRICT VALIDATION: Only cancel tasks & launch match if real match credentials found!
                             if token and udp_key and match_code and server_ip_port:
-                                print_success(f"[⚔] Match Found | UID: {uid_str} -> server: {server_ip_port}")
-                                for tk in (team_coord_task, member_trigger_task):
-                                    if tk and not tk.done():
-                                        tk.cancel()
-                                team_coord_task = None
-                                member_trigger_task = None
-                                _team_active["flag"] = False
-
                                 acc_tok = current_account_data.get('access_token', '') if current_account_data else ""
                                 thunder, sharma = await build_match_startup_packets(
                                     token, udp_key, match_code, effective_acc_id, block_val or 0,
@@ -2703,7 +2622,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 except Exception: pass
                                 async with _team_state["lock"]:
                                     _team_state["peers"].pop(uid_str, None)
-                                    _team_state.get("members_in_team", set()).discard(uid_str)
                                     _team_state["member_ready"] = False
                                     if is_leader:
                                         _team_state["team_code"] = None
@@ -2714,10 +2632,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                               match_index=match_index))
                                 play_matches.append(new_match)
                                 try:
-                                    await asyncio.wait_for(new_match, timeout=MAX_MATCH_DURATION + 10.0)
-                                except Exception as e:
-                                    print_warning(f"[MATCH] match execution: {e}")
-                                try:
                                     writer.close()
                                     await writer.wait_closed()
                                 except Exception: pass
@@ -2725,6 +2639,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 break
                         except Exception as e:
                             print_warning(f"[MATCH] {e}")
+                            continue
 
                     if 30 <= packet_length <= 40:
                         continue
@@ -2748,7 +2663,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 _team_active["flag"] = False
                 async with _team_state["lock"]:
                     _team_state["peers"].pop(uid_str, None)
-                    _team_state.get("members_in_team", set()).discard(uid_str)
                     _team_state["member_ready"] = False
                     if is_leader:
                         _team_state["team_code"] = None
