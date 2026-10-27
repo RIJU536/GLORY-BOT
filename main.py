@@ -2214,8 +2214,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
             print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} loop: ready -> start (auto duo sync)")
             wait_partner_ticks = 0
-            search_sent = False
-            search_sent_time = 0.0
             while _team_active["flag"]:
                 try:
                     if bot_state.is_paused(uid_str): break
@@ -2224,7 +2222,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                     # STRICT DUO: Never start match solo! Auto re-create squad team if partner not joined
                     if not is_partner_ready:
-                        search_sent = False
                         wait_partner_ticks += 1
                         if wait_partner_ticks % 4 == 0:
                             print_info(f"[SQUAD {squad_id+1}] 🔄 Leader {uid_str} re-syncing team & inviting partner...")
@@ -2250,34 +2247,24 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         continue
 
                     wait_partner_ticks = 0
-                    now = time.time()
-                    if not search_sent or (now - search_sent_time > 35.0):
-                        own_id = current_account_data.get('account_id', own_id_num) if current_account_data else own_id_num
-                        try:
-                            rdy = ready_for_game(int(own_id), current_key, current_iv)
-                            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
-                        except Exception as e:
-                            print_warning(f"[TEAM] ready_for_game err: {e}")
-                        await asyncio.sleep(0.5)
-                        try:
-                            sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
-                            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
-                        except Exception as e:
-                            print_warning(f"[TEAM] start_match err: {e}")
-                        await asyncio.sleep(0.5)
-                        try:
-                            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                                await start_game_battle_royale(account_region, client_version, _writer_ref["w"], current_key, current_iv)
-                                print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} queued DUO match search with partner!")
-                                search_sent = True
-                                search_sent_time = now
-                        except Exception as e:
-                            print_warning(f"[TEAM] start_game_battle_royale err: {e}")
+                    own_id = current_account_data.get('account_id', own_id_num) if current_account_data else own_id_num
+                    try:
+                        rdy = ready_for_game(int(own_id), current_key, current_iv)
+                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                            _writer_ref["w"].write(rdy); await _writer_ref["w"].drain()
+                    except Exception as e:
+                        print_warning(f"[TEAM] ready_for_game err: {e}")
+                    await asyncio.sleep(1.0)
+                    try:
+                        sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
+                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                            _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
+                            print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} sent DUO start_match (partner ready)")
+                    except Exception as e:
+                        print_warning(f"[TEAM] start_match err: {e}")
                 except Exception as e:
                     print_warning(f"[TEAM] start_match err: {e}")
-                try: await asyncio.wait_for(asyncio.sleep(3.0), timeout=3.5)
+                try: await asyncio.wait_for(asyncio.sleep(4.5), timeout=5.0)
                 except asyncio.TimeoutError: pass
         except asyncio.CancelledError: raise
         except Exception as e:
@@ -2321,6 +2308,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                     _team_state["member_ready"] = True
                             except Exception as e:
                                 print_warning(f"[TEAM] join_team_by_code err: {e}")
+                        else:
+                            try:
+                                rdy = ready_for_game(int(my_id), current_key, current_iv)
+                                _writer_ref["w"].write(rdy)
+                                await _writer_ref["w"].drain()
+                            except Exception:
+                                pass
 
                 except Exception as e:
                     print_warning(f"[TEAM] member trigger: {e}")
