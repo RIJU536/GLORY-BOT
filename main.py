@@ -2318,10 +2318,11 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     except Exception as e:
                         print_warning(f"[TEAM] start_match err: {e}")
 
-                    # Keep matchmaking heartbeat active: refresh ready + start every 5 seconds until 0300 match found
-                    try:
-                        await asyncio.wait_for(asyncio.sleep(5.0), timeout=5.5)
-                    except asyncio.TimeoutError: pass
+                    # HOLD in matchmaking queue for 35s to allow Garena server to match opponents without cancel!
+                    search_start = time.time()
+                    while _team_active["flag"] and (time.time() - search_start < 35.0):
+                        if bot_state.is_paused(uid_str): break
+                        await asyncio.sleep(1.0)
 
                 except Exception as e:
                     print_warning(f"[TEAM] start_match loop err: {e}")
@@ -2382,19 +2383,11 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             except Exception as e:
                                 print_warning(f"[TEAM] join_team_by_code err: {e}")
 
-                        # Maintain ready heartbeat every 3.5s
-                        if is_rdy and _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                            try:
-                                rdy19 = ready_for_game(int(my_id), current_key, current_iv)
-                                _writer_ref["w"].write(rdy19)
-                                await _writer_ref["w"].drain()
-                            except Exception: pass
-
                 except Exception as e:
                     print_warning(f"[TEAM] member trigger: {e}")
 
-                try: await asyncio.wait_for(asyncio.sleep(3.5), timeout=4.0)
-                except asyncio.TimeoutError: pass
+                # Sleep and DO NOT spam ready if already ready!
+                await asyncio.sleep(2.0)
         except asyncio.CancelledError:
             raise
         except Exception as e:
