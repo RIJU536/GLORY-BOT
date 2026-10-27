@@ -88,8 +88,8 @@ PING_URL         = "https://loginbp.ppmainecoonghj.com/Ping"
 PING_REAL_IP     = "103.109.214.211"
 NEW_MATCH_DELAY = 1.0
 MAX_CONCURRENT_MATCHES = 20
-MAX_MATCH_DURATION = 1500
-MATCH_IDLE_TIMEOUT  = 12.0
+MAX_MATCH_DURATION = 65.0
+MATCH_IDLE_TIMEOUT  = 10.0
 
 _accept_friend_request = True
 DEBUG_ALL_PACKETS = False
@@ -1863,6 +1863,7 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
         while not local_closed:
             if time.time() - match_start_time > MAX_MATCH_DURATION:
                 completed_cleanly = True
+                print_info(f"[MATCH #{match_index}] Match max duration reached ({MAX_MATCH_DURATION}s), returning to lobby...")
                 break
             try:
                 response, server_addr = await asyncio.wait_for(
@@ -2586,7 +2587,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                               match_index=match_index))
                                 play_matches.append(new_match)
                                 try:
-                                    await new_match
+                                    await asyncio.wait_for(new_match, timeout=MAX_MATCH_DURATION + 10.0)
                                 except Exception as e:
                                     print_warning(f"[MATCH] match execution: {e}")
                                 try:
