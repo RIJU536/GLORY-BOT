@@ -2394,7 +2394,8 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 await _writer_ref["w"].drain()
                                 last_joined_tc = tc
                                 print_success(f"[DUO {squad_id+1}] 🔑 Member {uid_str} joined via team_code {tc}")
-                                await asyncio.sleep(0.8)
+                                # Wait for Garena server to register member in room
+                                await asyncio.sleep(1.5)
 
                                 # Confirm ready (both 0519 and 0515 cmd 15)
                                 rdy19 = ready_for_game(int(my_id), current_key, current_iv)
@@ -2403,10 +2404,12 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 _writer_ref["w"].write(rdy15)
                                 await _writer_ref["w"].drain()
 
+                                # Brief grace period before signaling Leader
+                                await asyncio.sleep(1.0)
                                 async with _team_state["lock"]:
                                     _team_state["member_ready"] = True
                                     _team_state.setdefault("members_in_team", set()).add(uid_str)
-                                print_success(f"[DUO {squad_id+1}] ✅ Member {uid_str} confirmed READY")
+                                print_success(f"[DUO {squad_id+1}] ✅ Member {uid_str} confirmed READY in room")
                             except Exception as e:
                                 print_warning(f"[TEAM] join_team_by_code err: {e}")
 
@@ -2547,9 +2550,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                             tc = extract_team_code_from_proto(dec)
                             if tc:
+                                is_new_tc = False
                                 async with _team_state["lock"]:
-                                    _team_state["team_code"] = tc
-                                print_success(f"[SQUAD {squad_id+1}] 📢 Team Code captured: {tc}")
+                                    if _team_state.get("team_code") != tc:
+                                        _team_state["team_code"] = tc
+                                        is_new_tc = True
+                                if is_new_tc:
+                                    print_success(f"[SQUAD {squad_id+1}] 📢 Team Code captured: {tc}")
 
                             f5w = dec.get("5") or dec.get(5)
                             f5 = f5w.get("data") if isinstance(f5w, dict) and "data" in f5w else f5w
