@@ -2310,18 +2310,27 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                     await asyncio.sleep(0.8)
 
-                    # Send start_match_team
+                    # Send start_match_team (lobby start)
                     try:
                         sm = start_match_team(int(own_id), current_key, current_iv, region=account_region)
                         if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                             _writer_ref["w"].write(sm); await _writer_ref["w"].drain()
-                            print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} queued DUO match! Waiting for match found (35s hold)...")
                     except Exception as e:
                         print_warning(f"[TEAM] start_match err: {e}")
 
-                    # HOLD in matchmaking queue for 35s to prevent cancelling the search!
+                    await asyncio.sleep(0.5)
+
+                    # Send start_game_battle_royale (actual matchmaking queue trigger)
+                    try:
+                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                            await start_game_battle_royale(account_region, client_version, _writer_ref["w"], current_key, current_iv)
+                            print_success(f"[SQUAD {squad_id+1}] 🚀 Leader {uid_str} queued DUO match! Waiting for match found (45s hold)...")
+                    except Exception as e:
+                        print_warning(f"[TEAM] battle_royale_queue err: {e}")
+
+                    # HOLD in matchmaking queue for 45s to prevent cancelling the search!
                     search_start = time.time()
-                    while _team_active["flag"] and (time.time() - search_start < 35.0):
+                    while _team_active["flag"] and (time.time() - search_start < 45.0):
                         if bot_state.is_paused(uid_str): break
                         await asyncio.sleep(1.0)
 
