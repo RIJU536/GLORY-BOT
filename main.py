@@ -1013,6 +1013,9 @@ def create_team(key, iv, game_version="1.132.9", region="IND"):
 def team_fresh(account_id, key, iv):
     return create_packet(create_proto({1:72, 2:{1:int(account_id)}}).hex(), "0515", key, iv)
 
+def leave_team(account_id, key, iv):
+    return create_packet(create_proto({1:6, 2:{1:int(account_id)}}).hex(), "0515", key, iv)
+
 def invite_player_in_team(target_uid, key, iv, region="BD"):
     fields = {1: 2, 2: {1: int(target_uid), 2: str(region).upper(), 4: 1}}
     return create_packet(create_proto(fields).hex(), "0515", key, iv)
@@ -2203,6 +2206,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 except Exception: own_id_num = 0
 
             try:
+                leave_pkt = leave_team(int(own_id_num), current_key, current_iv)
+                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                    _writer_ref["w"].write(leave_pkt); await _writer_ref["w"].drain()
+            except Exception: pass
+            await asyncio.sleep(0.5)
+
+            try:
                 pkt = create_team(current_key, current_iv, client_version, region=account_region)
                 if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                     _writer_ref["w"].write(pkt); await _writer_ref["w"].drain()
@@ -2329,6 +2339,11 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             print_success(f"[SQUAD {squad_id+1}] 🛡️ Member {uid_str} loop active (auto-ready & team-code join)")
             my_id = current_account_data.get('account_id', uid_str) if current_account_data else uid_str
             last_joined_tc = None
+            try:
+                leave_pkt = leave_team(int(my_id), current_key, current_iv)
+                if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                    _writer_ref["w"].write(leave_pkt); await _writer_ref["w"].drain()
+            except Exception: pass
 
             while _team_active["flag"]:
                 try:
@@ -2490,10 +2505,15 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     if hex_data.startswith("0600") and packet_length > 20:
                         await _process_social_packet(data, tag="MAIN"); continue
 
-                    # 0500: team/invite (MULTI-OFFSET DUO JOIN)
-                    if ("0500" in hex_data) and packet_length > 10:
+                    # 0500/0515/0518/0514: team/invite (MULTI-OFFSET DUO JOIN)
+                    if any(op in hex_data for op in ["0500", "0515", "0518", "0514", "0501"]) and packet_length > 10:
                         try:
-                            p_off = hex_data.find("0500")
+                            p_off = -1
+                            for op in ["0500", "0515", "0518", "0514", "0501"]:
+                                idx = hex_data.find(op)
+                                if idx != -1:
+                                    p_off = idx
+                                    break
                             slice_hex = hex_data[p_off:]
                             dec = None
                             for off in (10, 12, 8, 6, 14, 16, 4, 18, 20):
